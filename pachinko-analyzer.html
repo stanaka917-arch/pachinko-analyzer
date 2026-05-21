@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎰 パチンコデータ解析</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;700&family=Noto+Sans+JP:wght@400;700&display=swap');
+
+  :root {
+    --bg: #080c14;
+    --card: #0e1524;
+    --card2: #131d30;
+    --border: #1a2540;
+    --accent: #00c6ff;
+    --gold: #f5c842;
+    --green: #00e5a0;
+    --red: #ff4d6d;
+    --text: #d4e1f7;
+    --muted: #4a6080;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { min-height: 100vh; background: var(--bg); color: var(--text); font-family: 'Noto Sans JP', sans-serif; }
+
+  /* ヘッダー */
+  .header {
+    background: linear-gradient(135deg, #060a12 0%, #0e1e3a 100%);
+    border-bottom: 1px solid var(--border);
+    padding: 14px 16px 0;
+    position: sticky; top: 0; z-index: 100;
+  }
+  .header-top { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .header-title { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 700; color: var(--accent); letter-spacing: 2px; }
+  .header-sub { font-size: 10px; color: var(--muted); }
+  .badge { margin-left: auto; background: var(--card2); border: 1px solid var(--border); border-radius: 20px; padding: 3px 10px; font-size: 11px; color: var(--muted); }
+
+  /* タブ */
+  .tabs { display: flex; gap: 2px; overflow-x: auto; }
+  .tab { padding: 8px 14px; border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; border-bottom: 2px solid transparent; white-space: nowrap; font-family: 'Noto Sans JP', sans-serif; transition: all .2s; }
+  .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* コンテンツ */
+  .content { max-width: 720px; margin: 0 auto; padding: 16px 12px 40px; }
+
+  /* アップロードゾーン */
+  .upload-zone {
+    border: 2px dashed var(--border);
+    border-radius: 18px;
+    padding: 0;
+    text-align: center;
+    cursor: pointer;
+    background: var(--card);
+    transition: all .25s;
+    position: relative;
+    overflow: hidden;
+  }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent); background: rgba(0,198,255,.06); }
+  .upload-zone label {
+    display: block;
+    padding: 40px 20px;
+    cursor: pointer;
+    width: 100%;
+  }
+  .upload-zone input[type=file] {
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    cursor: pointer;
+    width: 100%;
+    height: 100%;
+    z-index: 2;
+  }
+  .upload-icon { font-size: 52px; margin-bottom: 12px; display: block; }
+  .upload-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+  .upload-sub { font-size: 12px; color: var(--muted); }
+
+  /* 日付行 */
+  .date-row { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
+  .date-row label { font-size: 12px; color: var(--muted); }
+  .date-input {
+    background: var(--card); border: 1px solid var(--border); color: var(--text);
+    border-radius: 8px; padding: 5px 10px; font-size: 13px; font-family: inherit;
+  }
+
+  /* ローディング */
+  .loading { text-align: center; padding: 40px; }
+  .spin { display: inline-block; font-size: 36px; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: var(--muted); font-size: 13px; margin-top: 10px; }
+
+  /* エラー */
+  .error-box { background: #1a0810; border: 1px solid #7f1d1d; border-radius: 10px; padding: 12px 14px; color: #fca5a5; font-size: 13px; margin-bottom: 12px; }
+
+  /* プレビューカード */
+  .preview-card { background: var(--card); border-radius: 16px; padding: 16px; border: 1px solid var(--border); margin-top: 14px; }
+  .preview-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+  .preview-title { font-size: 14px; font-weight: 700; color: var(--green); }
+  .btn-save {
+    background: linear-gradient(135deg, var(--accent), #0080ff);
+    color: #fff; border: none; border-radius: 10px; padding: 9px 20px;
+    font-weight: 700; cursor: pointer; font-size: 13px; font-family: inherit;
+    box-shadow: 0 4px 15px rgba(0,198,255,.3);
+  }
+  .btn-save:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(0,198,255,.4); }
+
+  /* テーブル */
+  .tbl { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .tbl th { padding: 6px 8px; color: var(--muted); border-bottom: 1px solid var(--border); }
+  .tbl td { padding: 5px 8px; border-bottom: 1px solid rgba(26,37,64,.5); }
+  .tbl td.tai { color: var(--accent); font-weight: 700; }
+  .tbl td.bb { color: var(--gold); text-align: right; }
+  .tbl td.rb { color: var(--green); text-align: right; }
+  .tbl td.num { text-align: right; }
+  .tbl th.sortable { cursor: pointer; user-select: none; }
+  .tbl th.sortable:hover { color: var(--accent); }
+  .tbl th.sorted { color: var(--accent); }
+  .tbl tr.data-row:hover { background: rgba(0,198,255,.05); cursor: pointer; }
+
+  /* ミニバー */
+  .bar-wrap { display: flex; align-items: center; gap: 6px; justify-content: flex-end; }
+  .bar-track { flex: 1; max-width: 60px; height: 5px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar-fill { height: 100%; border-radius: 3px; transition: width .5s ease; }
+  .bar-val { font-size: 11px; color: var(--muted); min-width: 26px; text-align: right; }
+
+  /* 日付チップ */
+  .date-chips { display: flex; gap: 6px; overflow-x: auto; margin-bottom: 14px; padding-bottom: 4px; }
+  .date-chip { padding: 5px 12px; border-radius: 20px; border: 1px solid var(--border); background: var(--card); color: var(--muted); font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; font-family: inherit; transition: all .2s; }
+  .date-chip.active { background: var(--accent); border-color: var(--accent); color: #000; }
+
+  /* 空状態 */
+  .empty { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-icon { font-size: 48px; margin-bottom: 14px; }
+
+  /* おすすめカード */
+  .rec-card { background: var(--card); border-radius: 16px; padding: 16px; margin-bottom: 12px; border: 1px solid var(--border); transition: all .2s; }
+  .rec-card.rank1 { border-color: var(--gold); box-shadow: 0 0 20px rgba(245,200,66,.12); }
+  .rec-header { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+  .rec-rank { font-size: 28px; }
+  .rec-num { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; }
+  .rec-score { font-size: 11px; color: var(--muted); }
+  .rec-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .rec-stat { background: var(--bg); border-radius: 10px; padding: 10px 12px; }
+  .rec-stat-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; }
+  .rec-stat-val { font-family: 'Rajdhani', sans-serif; font-size: 22px; font-weight: 700; }
+  .btn-hist { background: transparent; border: 1px solid var(--border); color: var(--muted); border-radius: 8px; padding: 4px 10px; cursor: pointer; font-size: 11px; font-family: inherit; margin-left: auto; }
+
+  /* 履歴 */
+  .tai-select { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 8px; padding: 5px 10px; font-size: 13px; font-family: inherit; margin-left: 8px; }
+  .hist-card { background: var(--card); border-radius: 16px; padding: 16px; border: 1px solid var(--border); }
+  .hist-title { font-size: 15px; font-weight: 700; color: var(--accent); margin-bottom: 16px; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px; }
+  .chart-wrap { margin-bottom: 14px; overflow-x: auto; }
+  canvas { display: block; }
+
+  .scroll-hint { font-size: 10px; color: var(--muted); text-align: center; margin-top: 4px; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-top">
+    <span style="font-size:22px">🎰</span>
+    <div>
+      <div class="header-title">PACHINKO ANALYZER</div>
+      <div class="header-sub">スクショから自動収集・分析</div>
+    </div>
+    <div class="badge" id="badge">0日分記録</div>
+  </div>
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('upload')">📷 取込</button>
+    <button class="tab" onclick="switchTab('list')">📋 一覧</button>
+    <button class="tab" onclick="switchTab('history')">📈 履歴</button>
+    <button class="tab" onclick="switchTab('recommend')">⭐ おすすめ</button>
+  </div>
+</div>
+
+<div class="content">
+
+  <!-- ── UPLOAD ── -->
+  <div id="tab-upload">
+    <div class="date-row">
+      <label>記録日：</label>
+      <input type="date" id="dateInput" class="date-input">
+    </div>
+
+    <div class="upload-zone" id="dropZone">
+      <input type="file" accept="image/*" id="fileInput" multiple>
+      <label for="fileInput">
+        <span class="upload-icon">📱</span>
+        <div class="upload-title">スクショをタップして選択</div>
+        <div class="upload-sub">またはここにドロップ<br>複数枚まとめてOK</div>
+      </label>
+    </div>
+
+    <div id="loadingArea" style="display:none" class="loading">
+      <div class="spin">⚙️</div>
+      <div class="loading-text" id="loadingText">AIがデータを読み取り中...</div>
+    </div>
+    <div id="errorArea" style="display:none" class="error-box"></div>
+
+    <div id="previewArea" style="display:none" class="preview-card">
+      <div class="preview-header">
+        <div class="preview-title" id="previewTitle">✅ 抽出完了</div>
+        <button class="btn-save" onclick="saveData()">💾 保存する</button>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="tbl" id="previewTable">
+          <thead><tr>
+            <th style="text-align:left">台番</th>
+            <th style="text-align:right">BB</th>
+            <th style="text-align:right">RB</th>
+            <th style="text-align:right">ART</th>
+            <th style="text-align:right">最高出玉</th>
+          </tr></thead>
+          <tbody id="previewBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── LIST ── -->
+  <div id="tab-list" style="display:none">
+    <div class="date-chips" id="dateChips"></div>
+    <div id="listEmpty" class="empty" style="display:none">
+      <div class="empty-icon">📭</div>
+      <div>スクショをアップして記録を始めましょう</div>
+    </div>
+    <div style="overflow-x:auto">
+      <table class="tbl" id="listTable" style="display:none">
+        <thead><tr>
+          <th style="text-align:left">台番</th>
+          <th class="sortable sorted" data-key="BB" style="text-align:right">BB ↓</th>
+          <th class="sortable" data-key="RB" style="text-align:right">RB</th>
+          <th class="sortable" data-key="ART" style="text-align:right">ART</th>
+          <th class="sortable" data-key="最高出玉" style="text-align:right">最高出玉</th>
+        </tr></thead>
+        <tbody id="listBody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── HISTORY ── -->
+  <div id="tab-history" style="display:none">
+    <div style="margin-bottom:14px;display:flex;align-items:center;">
+      <label style="font-size:12px;color:var(--muted)">台番号：</label>
+      <select class="tai-select" id="taiSelect" onchange="renderHistory()">
+        <option value="">-- 選択してください --</option>
+      </select>
+    </div>
+    <div id="histEmpty" class="empty">
+      <div class="empty-icon">📊</div>
+      <div>台番を選ぶと推移グラフが表示されます</div>
+    </div>
+    <div id="histCard" class="hist-card" style="display:none">
+      <div class="hist-title" id="histTitle"></div>
+      <div class="chart-wrap">
+        <canvas id="histCanvas" width="680" height="180"></canvas>
+      </div>
+      <div class="scroll-hint">← スクロールで確認</div>
+      <div style="overflow-x:auto;margin-top:12px">
+        <table class="tbl" id="histTable">
+          <thead><tr>
+            <th style="text-align:left">日付</th>
+            <th style="text-align:right;color:var(--gold)">BB</th>
+            <th style="text-align:right;color:var(--green)">RB</th>
+            <th style="text-align:right">ART</th>
+            <th style="text-align:right;color:var(--accent)">最高出玉</th>
+          </tr></thead>
+          <tbody id="histBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── RECOMMEND ── -->
+  <div id="tab-recommend" style="display:none">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:12px" id="recDateLabel"></div>
+    <div style="font-size:11px;color:var(--muted);margin-bottom:14px;background:var(--card);border-radius:8px;padding:8px 12px;border:1px solid var(--border)">
+      📌 スコア = BB×3 + RB + 最高出玉÷200（高いほど優良台）
+    </div>
+    <div id="recEmpty" class="empty" style="display:none">
+      <div class="empty-icon">⭐</div>
+      <div>データを記録するとおすすめ台が表示されます</div>
+    </div>
+    <div id="recList"></div>
+  </div>
+
+</div>
+
+<script>
+// ── ストレージ ──────────────────────────────────────────────
+const SKEY = "pachinko_v2";
+let history = [];
+try { history = JSON.parse(localStorage.getItem(SKEY) || "[]"); } catch {}
+
+function persist() {
+  try { localStorage.setItem(SKEY, JSON.stringify(history)); } catch {}
+}
+
+// ── 日付デフォルト ──
+const today = new Date();
+document.getElementById("dateInput").value =
+  today.toISOString().slice(0,10);
+
+// ── タブ切替 ──────────────────────────────────────────────
+function switchTab(name) {
+  ["upload","list","history","recommend"].forEach(t => {
+    document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
+  });
+  document.querySelectorAll(".tab").forEach((el,i) => {
+    el.classList.toggle("active", ["upload","list","history","recommend"][i] === name);
+  });
+  if(name==="list") renderList();
+  if(name==="history") renderTaiSelect();
+  if(name==="recommend") renderRecommend();
+  updateBadge();
+}
+
+function updateBadge() {
+  document.getElementById("badge").textContent = history.length + "日分記録";
+}
+updateBadge();
+
+// ── ファイル選択 ──────────────────────────────────────────
+const fileInput = document.getElementById("fileInput");
+const dropZone  = document.getElementById("dropZone");
+
+fileInput.addEventListener("change", e => handleFiles(e.target.files));
+dropZone.addEventListener("dragover", e => { e.preventDefault(); dropZone.classList.add("drag"); });
+dropZone.addEventListener("dragleave", () => dropZone.classList.remove("drag"));
+dropZone.addEventListener("drop", e => { e.preventDefault(); dropZone.classList.remove("drag"); handleFiles(e.dataTransfer.files); });
+
+let pendingRows = [];
+
+async function handleFiles(files) {
+  if(!files.length) return;
+  pendingRows = [];
+  showLoading(true);
+  showError("");
+  hidePreview();
+
+  const arr = Array.from(files).filter(f => f.type.startsWith("image/"));
+  if(!arr.length) { showLoading(false); showError("画像ファイルを選んでください"); return; }
+
+  for(let i=0; i<arr.length; i++) {
+    setLoadingText(`AIが読み取り中... (${i+1}/${arr.length}枚)`);
+    try {
+      const b64 = await toBase64(arr[i]);
+      const rows = await extractFromImage(b64, arr[i].type);
+      pendingRows.push(...rows);
+    } catch(e) {
+      showLoading(false);
+      showError("抽出失敗: " + e.message);
+      return;
+    }
+  }
+
+  // 重複台番はマージ（後勝ち）
+  const map = {};
+  pendingRows.forEach(r => map[r["台番"]] = r);
+  pendingRows = Object.values(map).sort((a,b) => a["台番"]-b["台番"]);
+
+  showLoading(false);
+  showPreview(pendingRows);
+  fileInput.value = "";
+}
+
+function toBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(r.result.split(",")[1]);
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+}
+
+// ── AI抽出 ────────────────────────────────────────────────
+async function extractFromImage(b64, mimeType) {
+  const resp = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 2000,
+      messages: [{
+        role: "user",
+        content: [
+          { type: "image", source: { type: "base64", media_type: mimeType, data: b64 } },
+          { type: "text", text: `このパチンコ・スロットのデータ一覧画像から全台のデータを抽出してください。
+JSON配列のみを返してください。他のテキスト・Markdownは不要です。
+形式: [{"台番":1516,"BB":0,"RB":1,"ART":null,"最高出玉":125}, ...]
+- 台番・BB・RB・ART・最高出玉はすべて数値
+- "--"や空欄はnull
+- 列がない場合もnull` }
+        ]
+      }]
+    })
+  });
+  if(!resp.ok) throw new Error("API error: " + resp.status);
+  const data = await resp.json();
+  const text = (data.content||[]).find(b=>b.type==="text")?.text || "[]";
+  return JSON.parse(text.replace(/```json|```/g,"").trim());
+}
+
+// ── 保存 ──────────────────────────────────────────────────
+function saveData() {
+  if(!pendingRows.length) return;
+  const date = document.getElementById("dateInput").value;
+  history = history.filter(h => h.date !== date);
+  history.push({ date, rows: pendingRows });
+  history.sort((a,b) => a.date.localeCompare(b.date));
+  persist();
+  pendingRows = [];
+  hidePreview();
+  updateBadge();
+  switchTab("list");
+}
+
+// ── UI ───────────────────────────────────────────────────
+function showLoading(v) { document.getElementById("loadingArea").style.display = v ? "" : "none"; }
+function setLoadingText(t) { document.getElementById("loadingText").textContent = t; }
+function showError(msg) {
+  const el = document.getElementById("errorArea");
+  el.style.display = msg ? "" : "none";
+  el.textContent = msg ? "⚠️ " + msg : "";
+}
+function hidePreview() { document.getElementById("previewArea").style.display = "none"; }
+function showPreview(rows) {
+  document.getElementById("previewTitle").textContent = `✅ 抽出完了 — ${rows.length}台`;
+  const tbody = document.getElementById("previewBody");
+  tbody.innerHTML = "";
+  rows.slice(0,15).forEach(r => {
+    tbody.innerHTML += `<tr>
+      <td class="tai">#${r["台番"]}</td>
+      <td class="bb">${r.BB??'--'}</td>
+      <td class="rb">${r.RB??'--'}</td>
+      <td class="num">${r.ART??'--'}</td>
+      <td class="num">${r["最高出玉"]??'--'}</td>
+    </tr>`;
+  });
+  if(rows.length>15) tbody.innerHTML += `<tr><td colspan="5" style="text-align:center;color:var(--muted);font-size:11px">…他${rows.length-15}台</td></tr>`;
+  document.getElementById("previewArea").style.display = "";
+}
+
+// ── LIST ──────────────────────────────────────────────────
+let listSortKey = "BB", listSortDir = "desc", listDate = null;
+
+function renderList() {
+  const chips = document.getElementById("dateChips");
+  chips.innerHTML = "";
+  if(!history.length) {
+    document.getElementById("listEmpty").style.display = "";
+    document.getElementById("listTable").style.display = "none";
+    return;
+  }
+  document.getElementById("listEmpty").style.display = "none";
+  document.getElementById("listTable").style.display = "";
+
+  if(!listDate || !history.find(h=>h.date===listDate)) listDate = history[history.length-1].date;
+
+  history.forEach(h => {
+    const btn = document.createElement("button");
+    btn.className = "date-chip" + (h.date===listDate ? " active" : "");
+    btn.textContent = h.date;
+    btn.onclick = () => { listDate = h.date; renderList(); };
+    chips.appendChild(btn);
+  });
+
+  const rows = (history.find(h=>h.date===listDate)?.rows || []);
+  const maxBB  = Math.max(...rows.map(r=>r.BB??0), 1);
+  const maxRB  = Math.max(...rows.map(r=>r.RB??0), 1);
+  const maxOut = Math.max(...rows.map(r=>r["最高出玉"]??0), 1);
+
+  const sorted = [...rows].sort((a,b) => {
+    const av = a[listSortKey]??-1, bv = b[listSortKey]??-1;
+    return listSortDir==="desc" ? bv-av : av-bv;
+  });
+
+  const tbody = document.getElementById("listBody");
+  tbody.innerHTML = "";
+  sorted.forEach(r => {
+    const tr = document.createElement("tr");
+    tr.className = "data-row";
+    tr.innerHTML = `
+      <td class="tai">#${r["台番"]}</td>
+      <td>${miniBar(r.BB??0, maxBB, "var(--gold)")}</td>
+      <td>${miniBar(r.RB??0, maxRB, "var(--green)")}</td>
+      <td class="num">${r.ART??'–'}</td>
+      <td>${miniBar(r["最高出玉"]??0, maxOut, "var(--accent)")}</td>
+    `;
+    tr.onclick = () => { document.getElementById("taiSelect").value = r["台番"]; switchTab("history"); };
+    tbody.appendChild(tr);
+  });
+
+  // ソートヘッダー
+  document.querySelectorAll("#listTable th.sortable").forEach(th => {
+    const k = th.dataset.key;
+    th.className = "sortable" + (k===listSortKey ? " sorted" : "");
+    const arrow = k===listSortKey ? (listSortDir==="desc"?" ↓":" ↑") : "";
+    th.textContent = k + arrow;
+    th.onclick = () => {
+      if(listSortKey===k) listSortDir = listSortDir==="desc"?"asc":"desc";
+      else { listSortKey=k; listSortDir="desc"; }
+      renderList();
+    };
+  });
+}
+
+function miniBar(val, max, color) {
+  const pct = max>0 ? Math.min(val/max*100, 100) : 0;
+  return `<div class="bar-wrap">
+    <div class="bar-track"><div class="bar-fill" style="width:${pct}%;background:${color}"></div></div>
+    <span class="bar-val">${val}</span>
+  </div>`;
+}
+
+// ── HISTORY ───────────────────────────────────────────────
+function renderTaiSelect() {
+  const sel = document.getElementById("taiSelect");
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">-- 選択してください --</option>';
+  const allTai = [...new Set(history.flatMap(h=>h.rows.map(r=>r["台番"])))].sort((a,b)=>a-b);
+  allTai.forEach(t => {
+    const op = document.createElement("option");
+    op.value = t; op.textContent = "台番 #" + t;
+    sel.appendChild(op);
+  });
+  if(cur) sel.value = cur;
+  renderHistory();
+}
+
+function renderHistory() {
+  const tai = parseInt(document.getElementById("taiSelect").value);
+  if(!tai) {
+    document.getElementById("histEmpty").style.display = "";
+    document.getElementById("histCard").style.display = "none";
+    return;
+  }
+  document.getElementById("histEmpty").style.display = "none";
+  document.getElementById("histCard").style.display = "";
+  document.getElementById("histTitle").textContent = `台番 #${tai} の推移`;
+
+  const records = history.map(h => ({ date: h.date, row: h.rows.find(r=>r["台番"]===tai) })).filter(d=>d.row);
+
+  // テーブル
+  const tbody = document.getElementById("histBody");
+  tbody.innerHTML = "";
+  records.forEach(d => {
+    const r = d.row;
+    tbody.innerHTML += `<tr>
+      <td>${d.date}</td>
+      <td style="text-align:right;color:var(--gold)">${r.BB??'--'}</td>
+      <td style="text-align:right;color:var(--green)">${r.RB??'--'}</td>
+      <td style="text-align:right">${r.ART??'--'}</td>
+      <td style="text-align:right;color:var(--accent)">${r["最高出玉"]??'--'}</td>
+    </tr>`;
+  });
+
+  // キャンバスグラフ
+  drawChart(records);
+}
+
+function drawChart(records) {
+  const canvas = document.getElementById("histCanvas");
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  const pad = { l:40, r:16, t:20, b:36 };
+  const iW = W - pad.l - pad.r, iH = H - pad.t - pad.b;
+  const n = records.length;
+  ctx.clearRect(0,0,W,H);
+
+  if(n < 1) return;
+
+  const outVals = records.map(r=>r.row["最高出玉"]??0);
+  const bbVals  = records.map(r=>r.row.BB??0);
+  const rbVals  = records.map(r=>r.row.RB??0);
+  const maxOut  = Math.max(...outVals, 1);
+  const maxBB   = Math.max(...bbVals, 1);
+
+  const xOf = i => n===1 ? pad.l + iW/2 : pad.l + (i/(n-1))*iW;
+  const yOut = v => pad.t + iH - (v/maxOut)*iH;
+  const yBB  = v => pad.t + iH - (v/maxBB)*iH;
+
+  // グリッド
+  ctx.strokeStyle="#1a2540"; ctx.lineWidth=1;
+  [0,0.25,0.5,0.75,1].forEach(f => {
+    const y = pad.t + iH*f;
+    ctx.beginPath(); ctx.moveTo(pad.l, y); ctx.lineTo(W-pad.r, y); ctx.stroke();
+    ctx.fillStyle="#4a6080"; ctx.font="10px sans-serif"; ctx.textAlign="right";
+    ctx.fillText(Math.round(maxOut*(1-f)), pad.l-4, y+4);
+  });
+
+  // 最高出玉エリア
+  if(n>1) {
+    ctx.beginPath();
+    ctx.moveTo(xOf(0), pad.t+iH);
+    records.forEach((r,i) => ctx.lineTo(xOf(i), yOut(r.row["最高出玉"]??0)));
+    ctx.lineTo(xOf(n-1), pad.t+iH);
+    ctx.closePath();
+    ctx.fillStyle="rgba(0,198,255,0.12)"; ctx.fill();
+
+    ctx.beginPath();
+    records.forEach((r,i) => i===0 ? ctx.moveTo(xOf(i),yOut(r.row["最高出玉"]??0)) : ctx.lineTo(xOf(i),yOut(r.row["最高出玉"]??0)));
+    ctx.strokeStyle="#00c6ff"; ctx.lineWidth=2.5; ctx.stroke();
+
+    // BB折れ線（正規化）
+    ctx.beginPath();
+    records.forEach((r,i) => {
+      const y = pad.t + iH - (bbVals[i]/maxBB)*iH;
+      i===0 ? ctx.moveTo(xOf(i),y) : ctx.lineTo(xOf(i),y);
+    });
+    ctx.strokeStyle="#f5c842"; ctx.lineWidth=1.5; ctx.setLineDash([5,3]); ctx.stroke();
+    ctx.setLineDash([]);
+  }
+
+  // ドット
+  records.forEach((r,i) => {
+    ctx.beginPath(); ctx.arc(xOf(i), yOut(r.row["最高出玉"]??0), 4, 0, Math.PI*2);
+    ctx.fillStyle="#00c6ff"; ctx.fill();
+  });
+
+  // X軸ラベル
+  ctx.fillStyle="#4a6080"; ctx.font="10px sans-serif"; ctx.textAlign="center";
+  const step = Math.max(1, Math.ceil(n/6));
+  records.forEach((r,i) => {
+    if(i%step===0 || i===n-1) ctx.fillText(r.date.slice(5), xOf(i), H-6);
+  });
+
+  // 凡例
+  ctx.fillStyle="#00c6ff"; ctx.fillRect(pad.l, 4, 10, 4);
+  ctx.fillStyle="#94a3b8"; ctx.font="9px sans-serif"; ctx.textAlign="left";
+  ctx.fillText("出玉", pad.l+13, 9);
+  ctx.fillStyle="#f5c842"; ctx.fillRect(pad.l+46, 4, 10, 4);
+  ctx.fillStyle="#94a3b8"; ctx.fillText("BB(正規化)", pad.l+59, 9);
+}
+
+// ── RECOMMEND ────────────────────────────────────────────
+function renderRecommend() {
+  const last = history[history.length-1];
+  const label = document.getElementById("recDateLabel");
+  const recList = document.getElementById("recList");
+  const recEmpty = document.getElementById("recEmpty");
+
+  if(!last) { recEmpty.style.display=""; recList.innerHTML=""; label.textContent=""; return; }
+  recEmpty.style.display="none";
+  label.textContent = "📅 " + last.date + " のデータ基準";
+
+  const scored = [...last.rows]
+    .map(r => ({ ...r, score: (r.BB??0)*3 + (r.RB??0) + (r["最高出玉"]??0)/200 }))
+    .sort((a,b) => b.score-a.score)
+    .slice(0,5);
+
+  const medals = ["🥇","🥈","🥉","4️⃣","5️⃣"];
+  recList.innerHTML = scored.map((r,i) => `
+    <div class="rec-card ${i===0?"rank1":""}">
+      <div class="rec-header">
+        <span class="rec-rank">${medals[i]}</span>
+        <div>
+          <div class="rec-num" style="color:${i===0?"var(--gold)":"var(--text)"}">台番 #${r["台番"]}</div>
+          <div class="rec-score">スコア ${r.score.toFixed(1)}</div>
+        </div>
+        <button class="btn-hist" onclick="gotoHist(${r["台番"]})">履歴 →</button>
+      </div>
+      <div class="rec-grid">
+        <div class="rec-stat">
+          <div class="rec-stat-label">BB</div>
+          <div class="rec-stat-val" style="color:var(--gold)">${r.BB??'--'}</div>
+        </div>
+        <div class="rec-stat">
+          <div class="rec-stat-label">RB</div>
+          <div class="rec-stat-val" style="color:var(--green)">${r.RB??'--'}</div>
+        </div>
+        <div class="rec-stat">
+          <div class="rec-stat-label">最高出玉</div>
+          <div class="rec-stat-val" style="color:var(--accent)">${r["最高出玉"]??'--'}</div>
+        </div>
+      </div>
+    </div>
+  `).join("");
+}
+
+function gotoHist(tai) {
+  document.getElementById("taiSelect").value = tai;
+  switchTab("history");
+}
+</script>
+</body>
+</html>
