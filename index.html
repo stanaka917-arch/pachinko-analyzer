@@ -171,6 +171,7 @@
     <button class="tab" onclick="switchTab('list')">📋 一覧</button>
     <button class="tab" onclick="switchTab('history')">📈 履歴</button>
     <button class="tab" onclick="switchTab('recommend')">⭐ おすすめ</button>
+    <button class="tab" onclick="switchTab('settings')">⚙️ 設定</button>
   </div>
 </div>
 
@@ -285,6 +286,34 @@
     <div id="recList"></div>
   </div>
 
+  <!-- ── SETTINGS ── -->
+  <div id="tab-settings" style="display:none">
+    <div style="background:var(--card);border-radius:16px;padding:20px;border:1px solid var(--border)">
+      <div style="font-size:15px;font-weight:700;color:var(--accent);margin-bottom:6px">⚙️ Gemini APIキー設定</div>
+      <div style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+        Google AI Studio（aistudio.google.com）で取得したAPIキーを入力してください。<br>
+        キーはこの端末のみに保存され、外部には送信されません。
+      </div>
+      <input id="apiKeyInput" type="password"
+        placeholder="AIzaSy..."
+        style="width:100%;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:10px;padding:10px 14px;font-size:13px;font-family:inherit;margin-bottom:12px">
+      <button onclick="onApiKeySave()"
+        style="width:100%;background:linear-gradient(135deg,var(--accent),#0080ff);color:#000;border:none;border-radius:10px;padding:11px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit">
+        💾 APIキーを保存
+      </button>
+      <div id="apiKeySaved" style="display:none;text-align:center;color:var(--green);font-size:13px;margin-top:10px">✅ 保存しました！</div>
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--border)">
+        <div style="font-size:12px;color:var(--muted);line-height:1.8">
+          📌 APIキー取得手順：<br>
+          1. aistudio.google.com を開く<br>
+          2. Googleアカウントでログイン<br>
+          3.「Get API key」→「Create API key」<br>
+          4. 表示されたキーをコピーして上に貼り付け
+        </div>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
@@ -304,11 +333,11 @@ document.getElementById("dateInput").value =
 
 // ── タブ切替 ──────────────────────────────────────────────
 function switchTab(name) {
-  ["upload","list","history","recommend"].forEach(t => {
+  ["upload","list","history","recommend","settings"].forEach(t => {
     document.getElementById("tab-"+t).style.display = t===name ? "" : "none";
   });
   document.querySelectorAll(".tab").forEach((el,i) => {
-    el.classList.toggle("active", ["upload","list","history","recommend"][i] === name);
+    el.classList.toggle("active", ["upload","list","history","recommend","settings"][i] === name);
   });
   if(name==="list") renderList();
   if(name==="history") renderTaiSelect();
@@ -374,31 +403,57 @@ function toBase64(file) {
   });
 }
 
-// ── AI抽出 ────────────────────────────────────────────────
+// ── Gemini APIキー管理 ────────────────────────────────────
+const APIKEY_STORAGE = "gemini_api_key";
+function getApiKey() { return localStorage.getItem(APIKEY_STORAGE) || ""; }
+function saveApiKey(k) { localStorage.setItem(APIKEY_STORAGE, k); }
+
+// 初期化時にキー入力欄に反映
+window.addEventListener("DOMContentLoaded", () => {
+  const k = getApiKey();
+  if(k) document.getElementById("apiKeyInput").value = k;
+});
+
+function onApiKeySave() {
+  const v = document.getElementById("apiKeyInput").value.trim();
+  if(!v) { alert("APIキーを入力してください"); return; }
+  saveApiKey(v);
+  document.getElementById("apiKeySaved").style.display = "";
+  setTimeout(() => document.getElementById("apiKeySaved").style.display = "none", 2000);
+}
+
+// ── AI抽出（Gemini） ──────────────────────────────────────
 async function extractFromImage(b64, mimeType) {
-  const resp = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 2000,
-      messages: [{
-        role: "user",
-        content: [
-          { type: "image", source: { type: "base64", media_type: mimeType, data: b64 } },
-          { type: "text", text: `このパチンコ・スロットのデータ一覧画像から全台のデータを抽出してください。
+  const apiKey = getApiKey();
+  if(!apiKey) throw new Error("APIキーが設定されていません。⚙️設定タブで入力してください");
+
+  const resp = await fetch(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data: b64 } },
+            { text: `このパチンコ・スロットのデータ一覧画像から全台のデータを抽出してください。
 JSON配列のみを返してください。他のテキスト・Markdownは不要です。
 形式: [{"台番":1516,"BB":0,"RB":1,"ART":null,"最高出玉":125}, ...]
 - 台番・BB・RB・ART・最高出玉はすべて数値
 - "--"や空欄はnull
 - 列がない場合もnull` }
-        ]
-      }]
-    })
-  });
-  if(!resp.ok) throw new Error("API error: " + resp.status);
+          ]
+        }],
+        generationConfig: { temperature: 0 }
+      })
+    }
+  );
+  if(!resp.ok) {
+    const err = await resp.json().catch(()=>({}));
+    throw new Error(err?.error?.message || "API error: " + resp.status);
+  }
   const data = await resp.json();
-  const text = (data.content||[]).find(b=>b.type==="text")?.text || "[]";
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
   return JSON.parse(text.replace(/```json|```/g,"").trim());
 }
 
