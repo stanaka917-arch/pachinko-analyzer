@@ -154,9 +154,117 @@
 
   .scroll-hint { font-size: 10px; color: var(--muted); text-align: center; margin-top: 4px; }
 </style>
+<!-- Firebase SDK -->
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged }
+  from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyB88t9CRRDMijiw0EY_n67nIXwcvBre3Dw",
+  authDomain: "pachinko-analyzer.firebaseapp.com",
+  projectId: "pachinko-analyzer",
+  storageBucket: "pachinko-analyzer.firebasestorage.app",
+  messagingSenderId: "667145076102",
+  appId: "1:667145076102:web:0deabda171520a57338007"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+
+// ── 認証状態の監視 ──
+onAuthStateChanged(auth, user => {
+  if (user) {
+    document.getElementById("loginScreen").style.display = "none";
+    document.getElementById("appScreen").style.display = "";
+    document.getElementById("logoutBtn").style.display = "";
+    document.getElementById("userEmail").textContent = user.email;
+  } else {
+    document.getElementById("loginScreen").style.display = "";
+    document.getElementById("appScreen").style.display = "none";
+    document.getElementById("logoutBtn").style.display = "none";
+  }
+});
+
+// ── ログイン ──
+window.doLogin = async function() {
+  const email = document.getElementById("loginEmail").value.trim();
+  const pass  = document.getElementById("loginPass").value;
+  const errEl = document.getElementById("loginError");
+  errEl.textContent = "";
+  if(!email || !pass) { errEl.textContent = "メールとパスワードを入力してください"; return; }
+  try {
+    await signInWithEmailAndPassword(auth, email, pass);
+  } catch(e) {
+    errEl.textContent = "ログインに失敗しました。メールアドレスまたはパスワードが違います。";
+  }
+};
+
+// ── ログアウト ──
+window.doLogout = async function() {
+  await signOut(auth);
+};
+
+// Enterキーでログイン
+window.addEventListener("keydown", e => {
+  if(e.key === "Enter" && document.getElementById("loginScreen").style.display !== "none") {
+    window.doLogin();
+  }
+});
+</script>
+
 </head>
 <body>
 
+
+<!-- ログイン画面 -->
+<div id="loginScreen" style="
+  position:fixed;inset:0;background:#080c14;
+  display:flex;align-items:center;justify-content:center;z-index:9999;
+">
+  <div style="
+    background:#0e1524;border:1px solid #1a2540;border-radius:20px;
+    padding:36px 28px;width:90%;max-width:360px;
+  ">
+    <div style="text-align:center;margin-bottom:28px">
+      <div style="font-size:48px">🎰</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:22px;font-weight:700;color:#00c6ff;letter-spacing:2px;margin-top:8px">
+        PACHINKO ANALYZER
+      </div>
+      <div style="font-size:12px;color:#4a6080;margin-top:4px">ログインしてください</div>
+    </div>
+    <div style="margin-bottom:14px">
+      <div style="font-size:11px;color:#4a6080;margin-bottom:6px">メールアドレス</div>
+      <input id="loginEmail" type="email" placeholder="example@gmail.com"
+        style="width:100%;background:#080c14;border:1px solid #1a2540;color:#d4e1f7;
+        border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;outline:none">
+    </div>
+    <div style="margin-bottom:20px">
+      <div style="font-size:11px;color:#4a6080;margin-bottom:6px">パスワード</div>
+      <input id="loginPass" type="password" placeholder="••••••••"
+        style="width:100%;background:#080c14;border:1px solid #1a2540;color:#d4e1f7;
+        border-radius:10px;padding:11px 14px;font-size:14px;font-family:inherit;outline:none">
+    </div>
+    <div id="loginError" style="color:#ff4d6d;font-size:12px;margin-bottom:12px;min-height:18px;text-align:center"></div>
+    <button onclick="doLogin()"
+      style="width:100%;background:linear-gradient(135deg,#00c6ff,#0080ff);
+      color:#000;border:none;border-radius:12px;padding:13px;
+      font-weight:700;font-size:15px;cursor:pointer;font-family:inherit;
+      box-shadow:0 4px 20px rgba(0,198,255,.3)">
+      ログイン
+    </button>
+  </div>
+</div>
+
+<!-- ログアウトボタン -->
+<button id="logoutBtn" onclick="doLogout()"
+  style="display:none;position:fixed;bottom:20px;right:16px;z-index:500;
+  background:#1a2540;border:1px solid #1a2540;color:#4a6080;
+  border-radius:20px;padding:7px 16px;font-size:11px;cursor:pointer;font-family:inherit">
+  🚪 ログアウト
+</button>
+
+<div id="appScreen" style="display:none">
 <div class="header">
   <div class="header-top">
     <span style="font-size:22px">🎰</span>
@@ -739,5 +847,6 @@ function gotoHist(tai) {
   switchTab("history");
 }
 </script>
+</div>
 </body>
 </html>
